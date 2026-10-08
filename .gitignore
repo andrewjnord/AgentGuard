@@ -1,0 +1,10 @@
+bin/
+obj/
+node_modules/
+dist/
+*.user
+.vs/
+/data/
+/artifacts/
+src/AgentGuard.Service/wwwroot/
+TestResults/

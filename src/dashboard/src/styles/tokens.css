@@ -1,0 +1,86 @@
+/* Design tokens. Light is the default; dark follows the OS unless the user picks a theme. */
+:root {
+  --font-ui: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "Cascadia Code", "Cascadia Mono", Consolas, ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --fs-xs: 11.5px; --fs-sm: 12.5px; --fs-md: 13.5px; --fs-lg: 15px; --fs-xl: 18px; --fs-2xl: 22px; --fs-3xl: 30px;
+  --r-sm: 4px; --r-md: 6px; --r-lg: 10px;
+  --sidebar-w: 224px; --topbar-h: 56px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  color-scheme: light;
+  --bg: #f2f3f6;
+  --panel: #ffffff;
+  --panel-2: #f7f8fa;
+  --panel-hover: #f3f4f8;
+  --line: #e1e4ea;
+  --line-strong: #c9ced8;
+  --ink: #141924;
+  --ink-2: #464e5f;
+  --ink-3: #636b7d;
+  --ink-inverse: #ffffff;
+
+  --accent: #3a4fd8;
+  --accent-hover: #2f43c4;
+  --accent-ink: #2b3db3;
+  --accent-soft: #eaedfc;
+  --accent-line: #c3cbf6;
+  --focus: #3a4fd8;
+
+  --allow: #9aa2b1; --allow-ink: #464e5f; --allow-soft: #f0f1f4;
+  --log: #6b7486; --log-ink: #3c4455; --log-soft: #e9ebf0;
+  --ask: #d98e12; --ask-ink: #8a5300; --ask-soft: #fff4de; --ask-line: #f1cf8e;
+  --block: #d43a3a; --block-ink: #ad2020; --block-soft: #fdeded; --block-line: #f2b8b8;
+  --ok: #1d8350; --ok-ink: #166a40; --ok-soft: #e4f4eb;
+  --danger-fill: #c42b2b; --danger-fill-hover: #ad2020;
+
+  --sev-info: #8b93a3; --sev-low: #5b7fb8; --sev-medium: #d98e12; --sev-high: #e0572b; --sev-critical: #c42b2b;
+
+  --chart-rest: #c3c9d4;
+  --chart-grid: #e6e8ee;
+  --shadow-pop: 0 12px 32px -8px rgba(20, 25, 36, .22), 0 2px 6px rgba(20, 25, 36, .08);
+  --scrim: rgba(18, 22, 30, .38);
+  --skeleton: #eceef2;
+  --skeleton-hi: #f6f7f9;
+}
+
+/* The dark token set is duplicated for the OS preference and the manual override. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #0f1218; --panel: #161a22; --panel-2: #1a1f28; --panel-hover: #1e2430;
+    --line: #262c37; --line-strong: #363d4b;
+    --ink: #e6e9ef; --ink-2: #aab1bf; --ink-3: #8d95a5; --ink-inverse: #0f1218;
+    --accent: #8391ff; --accent-hover: #98a4ff; --accent-ink: #a6b0ff; --accent-soft: #1f2448; --accent-line: #39417a; --focus: #98a4ff;
+    --allow: #5d6576; --allow-ink: #aab1bf; --allow-soft: #1f242e;
+    --log: #8b94a6; --log-ink: #c4cad5; --log-soft: #232935;
+    --ask: #e9a53a; --ask-ink: #f3bd5f; --ask-soft: #2c2312; --ask-line: #5c4518;
+    --block: #f2605a; --block-ink: #ff8a83; --block-soft: #351a1c; --block-line: #6a2a2b;
+    --ok: #46be84; --ok-ink: #63d39b; --ok-soft: #13291f;
+    --danger-fill: #c73a3a; --danger-fill-hover: #d84848;
+    --sev-info: #7d8597; --sev-low: #7c9fd8; --sev-medium: #e9a53a; --sev-high: #f27a4e; --sev-critical: #f2605a;
+    --chart-rest: #3d4555; --chart-grid: #232935;
+    --shadow-pop: 0 16px 40px -8px rgba(0, 0, 0, .6), 0 2px 8px rgba(0, 0, 0, .4);
+    --scrim: rgba(4, 6, 10, .6);
+    --skeleton: #1d222c; --skeleton-hi: #252b37;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #0f1218; --panel: #161a22; --panel-2: #1a1f28; --panel-hover: #1e2430;
+  --line: #262c37; --line-strong: #363d4b;
+  --ink: #e6e9ef; --ink-2: #aab1bf; --ink-3: #8d95a5; --ink-inverse: #0f1218;
+  --accent: #8391ff; --accent-hover: #98a4ff; --accent-ink: #a6b0ff; --accent-soft: #1f2448; --accent-line: #39417a; --focus: #98a4ff;
+  --allow: #5d6576; --allow-ink: #aab1bf; --allow-soft: #1f242e;
+  --log: #8b94a6; --log-ink: #c4cad5; --log-soft: #232935;
+  --ask: #e9a53a; --ask-ink: #f3bd5f; --ask-soft: #2c2312; --ask-line: #5c4518;
+  --block: #f2605a; --block-ink: #ff8a83; --block-soft: #351a1c; --block-line: #6a2a2b;
+  --ok: #46be84; --ok-ink: #63d39b; --ok-soft: #13291f;
+  --danger-fill: #c73a3a; --danger-fill-hover: #d84848;
+  --sev-info: #7d8597; --sev-low: #7c9fd8; --sev-medium: #e9a53a; --sev-high: #f27a4e; --sev-critical: #f2605a;
+  --chart-rest: #3d4555; --chart-grid: #232935;
+  --shadow-pop: 0 16px 40px -8px rgba(0, 0, 0, .6), 0 2px 8px rgba(0, 0, 0, .4);
+  --scrim: rgba(4, 6, 10, .6);
+  --skeleton: #1d222c; --skeleton-hi: #252b37;
+}

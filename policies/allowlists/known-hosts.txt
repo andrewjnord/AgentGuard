@@ -1,0 +1,32 @@
+# Hosts that never raise a first-contact alert. One glob per line.
+# AI providers
+api.anthropic.com
+*.anthropic.com
+*.claude.ai
+claude.ai
+api.openai.com
+*.openai.com
+generativelanguage.googleapis.com
+*.githubcopilot.com
+copilot-proxy.githubusercontent.com
+api.cursor.sh
+*.cursor.sh
+# Source control and package registries
+github.com
+*.github.com
+api.github.com
+*.githubusercontent.com
+gitlab.com
+registry.npmjs.org
+*.npmjs.org
+pypi.org
+files.pythonhosted.org
+api.nuget.org
+*.nuget.org
+crates.io
+static.crates.io
+proxy.golang.org
+# Local
+localhost
+127.0.0.1
+::1

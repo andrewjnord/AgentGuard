@@ -1,0 +1,178 @@
+# AgentGuard discovery signatures.
+#
+# A process belongs to an agent when it matches one of the agent's `match` entries
+# (first agent in file order wins), or when its parent belongs to an agent.
+# match entry fields:
+#   process   glob on the process image name (e.g. "claude.exe", "node*")
+#   cmdline   any of these substrings must appear in the command line
+#   path      any of these globs must match the full executable path (forward slashes)
+#   path_not  none of these globs may match the full executable path
+
+agents:
+  - id: claude-desktop
+    name: Claude Desktop
+    kind: desktop
+    publisher: Anthropic
+    match:
+      - process: "claude.exe"
+        path: ["**/AnthropicClaude/**", "**/WindowsApps/Claude*/**", "**/Programs/Claude/**"]
+      - process: "Claude"
+        path: ["**/Claude.app/**"]
+
+  - id: claude-code
+    name: Claude Code
+    kind: cli
+    publisher: Anthropic
+    match:
+      - process: "claude.exe"
+      - process: "claude"
+      - process: "node*"
+        cmdline: ["@anthropic-ai/claude-code", "claude-code/cli"]
+      - process: "bun*"
+        cmdline: ["@anthropic-ai/claude-code"]
+
+  - id: cursor
+    name: Cursor
+    kind: desktop
+    publisher: Anysphere
+    match:
+      - process: "Cursor.exe"
+      - process: "cursor"
+        path: ["**/cursor/**", "**/Cursor/**"]
+
+  - id: windsurf
+    name: Windsurf
+    kind: desktop
+    publisher: Codeium
+    match:
+      - process: "Windsurf.exe"
+      - process: "windsurf"
+
+  - id: vscode
+    name: VS Code (Copilot)
+    kind: ide-extension
+    publisher: Microsoft
+    match:
+      - process: "Code.exe"
+      - process: "Code - Insiders.exe"
+      - process: "code"
+        path: ["**/code/**", "**/vscode/**", "**/VSCode*/**"]
+
+  - id: copilot-cli
+    name: GitHub Copilot CLI
+    kind: cli
+    publisher: GitHub
+    match:
+      - process: "copilot.exe"
+      - process: "node*"
+        cmdline: ["@github/copilot"]
+
+  - id: codex-cli
+    name: OpenAI Codex CLI
+    kind: cli
+    publisher: OpenAI
+    match:
+      - process: "codex.exe"
+      - process: "codex"
+      - process: "node*"
+        cmdline: ["@openai/codex"]
+
+  - id: gemini-cli
+    name: Gemini CLI
+    kind: cli
+    publisher: Google
+    match:
+      - process: "gemini.exe"
+      - process: "node*"
+        cmdline: ["@google/gemini-cli"]
+
+  - id: aider
+    name: Aider
+    kind: cli
+    match:
+      - process: "aider.exe"
+      - process: "python*"
+        cmdline: ["aider"]
+
+  - id: ollama
+    name: Ollama
+    kind: local-model
+    publisher: Ollama
+    match:
+      - process: "ollama.exe"
+      - process: "ollama app.exe"
+      - process: "ollama"
+
+  - id: lm-studio
+    name: LM Studio
+    kind: local-model
+    publisher: Element Labs
+    match:
+      - process: "LM Studio.exe"
+      - process: "lms.exe"
+      - process: "lm-studio"
+
+  - id: openclaw
+    name: OpenClaw
+    kind: cli
+    match:
+      - process: "openclaw*"
+      - process: "node*"
+        cmdline: ["openclaw"]
+
+# Launches by these are reported as shell.exec rather than process.start.
+shells:
+  - "cmd.exe"
+  - "powershell.exe"
+  - "pwsh.exe"
+  - "pwsh"
+  - "bash.exe"
+  - "bash"
+  - "sh"
+  - "zsh"
+  - "wsl.exe"
+  - "git-bash.exe"
+
+# Attributed to the parent agent but not reported as separate launches.
+quiet_processes:
+  - "conhost.exe"
+  - "agentguard-hook*"
+  - "crashpad_handler*"
+  - "WerFault.exe"
+
+# Never attributed to any agent.
+ignore_processes:
+  - "AgentGuard.Service*"
+  - "AgentGuard.Tray*"
+  - "agentguard.exe"
+
+# MCP client configuration files (paths expand per user profile).
+mcp_clients:
+  - client: Claude Desktop
+    servers_key: mcpServers
+    paths:
+      - "%APPDATA%/Claude/claude_desktop_config.json"
+      - "~/Library/Application Support/Claude/claude_desktop_config.json"
+      - "~/.config/Claude/claude_desktop_config.json"
+
+  - client: Claude Code
+    servers_key: mcpServers
+    claude_code_projects: true
+    paths:
+      - "~/.claude.json"
+
+  - client: Cursor
+    servers_key: mcpServers
+    paths:
+      - "~/.cursor/mcp.json"
+
+  - client: VS Code
+    servers_key: servers
+    paths:
+      - "%APPDATA%/Code/User/mcp.json"
+      - "~/.config/Code/User/mcp.json"
+
+  - client: Windsurf
+    servers_key: mcpServers
+    paths:
+      - "~/.codeium/windsurf/mcp_config.json"

@@ -1,0 +1,138 @@
+# AgentGuard default policy
+#
+# Rules are evaluated top to bottom; the first match wins. Anything unmatched is logged.
+# Verdicts: allow | log | ask | block
+# Modes:    monitor (never blocks, still alerts) | enforce | strict (uses verdict_strict where set)
+#
+# Match keys (all optional, all must match):
+#   agent, action, target, path, path_not, outside_cwd, command_regex,
+#   host, host_not_in, first_contact, tool
+# Path patterns: ~ and %USERPROFILE% %APPDATA% %LOCALAPPDATA% %PROGRAMDATA% expand per user.
+#   **  any number of folders   *  anything within one folder   ?  one character
+#   A pattern without a slash ("*.pem") matches the file name only.
+
+version: 1
+mode: enforce
+
+rules:
+  # --- Self-protection ------------------------------------------------------
+  - id: protect-agentguard-files
+    description: Agents may not touch AgentGuard's own policy, data or binaries.
+    match:
+      action: [file.write, file.delete, file.read]
+      path: ["%PROGRAMDATA%/AgentGuard/**", "C:/Program Files/AgentGuard/**"]
+    verdict: block
+    severity: critical
+
+  - id: protect-agentguard-service
+    description: Agents may not stop, kill or reconfigure AgentGuard.
+    match:
+      action: [shell.exec, process.start]
+      command_regex: '(sc(\.exe)?\s+(stop|delete|config)\s+agentguard|Stop-Service\s+.*agentguard|taskkill.*agentguard|Stop-Process.*agentguard|agentguard.*(uninstall|disable))'
+    verdict: block
+    severity: critical
+
+  # --- Secrets ---------------------------------------------------------------
+  - id: protect-ssh-keys
+    description: SSH keys and cloud credentials are never readable by agents.
+    match:
+      action: [file.read, file.write, file.delete]
+      path:
+        - "~/.ssh/**"
+        - "~/.aws/credentials"
+        - "~/.aws/config"
+        - "~/.azure/**"
+        - "~/.config/gcloud/**"
+        - "~/.kube/config"
+        - "~/.docker/config.json"
+        - "~/.git-credentials"
+        - "~/.npmrc"
+    verdict: block
+    severity: high
+
+  - id: protect-browser-data
+    description: Browser profiles hold cookies and saved passwords.
+    match:
+      action: [file.read, file.write]
+      path:
+        - "%LOCALAPPDATA%/Google/Chrome/User Data/**"
+        - "%LOCALAPPDATA%/Microsoft/Edge/User Data/**"
+        - "%LOCALAPPDATA%/BraveSoftware/Brave-Browser/User Data/**"
+        - "%APPDATA%/Mozilla/Firefox/Profiles/**"
+        - "~/.mozilla/firefox/**"
+        - "~/.config/google-chrome/**"
+    verdict: block
+    severity: high
+
+  - id: credential-manager
+    description: Windows Credential Manager and vault tools.
+    match:
+      action: [shell.exec, process.start]
+      command_regex: '\b(cmdkey(\.exe)?\s+/list|vaultcmd(\.exe)?|Get-StoredCredential|mimikatz|sekurlsa)\b'
+    verdict: block
+    severity: critical
+
+  - id: env-and-keys-outside-project
+    description: .env files and private keys outside the current project need approval.
+    match:
+      action: file.read
+      path: [".env", ".env.*", "*.pem", "*.key", "*.pfx", "*.p12", "id_rsa", "id_ed25519"]
+      outside_cwd: true
+    verdict: ask
+    severity: medium
+    timeout_seconds: 60
+    on_timeout: block
+
+  # --- Destructive commands --------------------------------------------------
+  - id: confirm-recursive-delete
+    description: Recursive deletes, disk formatting and history rewrites need approval.
+    match:
+      action: [shell.exec, process.start]
+      command_regex: '(\brm\s+(-[a-z]*r[a-z]*f|-[a-z]*f[a-z]*r|-r\b|--recursive)|Remove-Item\b.*-Recurse|\b(del|erase)\s+.*/s\b|\b(rd|rmdir)\s+.*/s\b|\bformat(\.com)?\s+[a-z]:|\bdiskpart\b|git\s+push\s+.*(--force|-f\b)|git\s+reset\s+--hard|git\s+clean\s+-[a-z]*f)'
+    verdict: ask
+    severity: medium
+    timeout_seconds: 60
+    on_timeout: block
+
+  - id: persistence-autorun
+    description: Autorun registry keys and scheduled tasks are common persistence tricks.
+    match:
+      action: [shell.exec, process.start]
+      command_regex: '(reg(\.exe)?\s+add\s+.*\\(Run|RunOnce)\b|New-ItemProperty\s+.*\\(Run|RunOnce)\b|schtasks(\.exe)?\s+/create|Register-ScheduledTask|crontab\s+-)'
+    verdict: ask
+    severity: high
+    timeout_seconds: 60
+    on_timeout: block
+
+  - id: defender-tampering
+    description: Attempts to disable Windows Defender or the firewall.
+    match:
+      action: [shell.exec, process.start]
+      command_regex: '(Set-MpPreference\s+.*-Disable|Add-MpPreference\s+.*-Exclusion|netsh\s+advfirewall\s+set\s+.*state\s+off)'
+    verdict: block
+    severity: critical
+
+  # --- Network ---------------------------------------------------------------
+  - id: first-contact-egress
+    description: An agent is talking to a host it has never contacted before.
+    match:
+      action: net.connect
+      host_not_in: allowlists/known-hosts.txt
+      first_contact: true
+    verdict: log
+    verdict_strict: ask
+    alert: true
+    severity: low
+    timeout_seconds: 60
+    on_timeout: block
+
+  # --- MCP tools -------------------------------------------------------------
+  - id: mcp-shell-tools
+    description: MCP tools that run arbitrary shell commands need approval.
+    match:
+      action: mcp.call
+      tool: ["*exec*", "*shell*", "*run_command*", "*terminal*"]
+    verdict: ask
+    severity: medium
+    timeout_seconds: 60
+    on_timeout: block
