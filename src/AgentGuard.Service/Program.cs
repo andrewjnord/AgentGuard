@@ -36,6 +36,8 @@ builder.WebHost.ConfigureKestrel((ctx, k) =>
 });
 
 builder.Services.ConfigureHttpJsonOptions(o => ApiJson.Apply(o.SerializerOptions));
+// Bad request bodies throw in every environment, so callers always get the same JSON error (handled below).
+builder.Services.Configure<Microsoft.AspNetCore.Routing.RouteHandlerOptions>(o => o.ThrowOnBadRequest = true);
 
 builder.Services.AddSingleton(sp => new EventStore(sp.GetRequiredService<AgentGuardOptions>().DatabasePath));
 builder.Services.AddSingleton(sp => SignatureFile.Load(sp.GetRequiredService<AgentGuardOptions>().SignaturesPath));
@@ -76,12 +78,21 @@ app.Services.GetRequiredService<TokenService>();
 
 app.UseExceptionHandler(errorApp => errorApp.Run(async ctx =>
 {
-    var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
-    var bad = ex is BadHttpRequestException;
-    if (!bad) app.Logger.LogError(ex, "Unhandled error for {Path}.", ctx.Request.Path);
-    ctx.Response.StatusCode = bad ? ((BadHttpRequestException)ex!).StatusCode : 500;
-    await ctx.Response.WriteAsJsonAsync(new { error = bad ? "The request body is not valid JSON for this endpoint." : "Internal error; see the AgentGuard service log." });
+    ctx.Response.StatusCode = 500;
+    await ctx.Response.WriteAsJsonAsync(new { error = "Internal error; see the AgentGuard service log." });
 }));
+// A malformed request body is the caller's mistake, not a service fault: answer 400 without logging an error.
+app.Use(async (ctx, next) =>
+{
+    try { await next(); }
+    catch (BadHttpRequestException ex) when (!ctx.Response.HasStarted)
+    {
+        app.Logger.LogDebug("Rejected a malformed request to {Path}: {Message}", ctx.Request.Path, ex.Message);
+        ctx.Response.Clear();
+        ctx.Response.StatusCode = ex.StatusCode;
+        await ctx.Response.WriteAsJsonAsync(new { error = "The request body is not valid JSON for this endpoint." });
+    }
+});
 app.UseMiddleware<LocalApiSecurityMiddleware>();
 
 var webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");

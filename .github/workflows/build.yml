@@ -94,7 +94,7 @@ jobs:
 
       - name: Install, check and uninstall the MSI
         shell: pwsh
-        run: ./build/smoke-test.ps1 -Msi (Get-ChildItem artifacts/msi/*.msi | Select-Object -First 1).FullName
+        run: ./build/smoke-test.ps1 -Msi (Get-ChildItem artifacts/msi/*.msi | Select-Object -First 1).FullName -Version ${{ steps.version.outputs.value }}
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

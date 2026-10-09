@@ -3,7 +3,7 @@
   Installs the MSI on a clean Windows machine (the CI runner), checks that every part comes up, then uninstalls it
   and checks that nothing is left behind except the data folder. Needs an elevated session.
 #>
-param([Parameter(Mandatory)] [string]$Msi)
+param([Parameter(Mandatory)] [string]$Msi, [string]$Version = "")
 $ErrorActionPreference = "Stop"
 $logs = Join-Path (Get-Location) "artifacts/logs"
 New-Item -ItemType Directory -Force $logs | Out-Null
@@ -28,6 +28,7 @@ for ($i = 0; $i -lt 30 -and -not $health; $i++) {
     try { $health = Invoke-RestMethod http://127.0.0.1:47823/api/v1/health } catch { Start-Sleep 1 }
 }
 Check ($health.ok -eq $true) "API health"
+if ($Version) { Check ($health.version -eq $Version) "service reports the build version ($($health.version) = $Version)" }
 $page = Invoke-WebRequest http://127.0.0.1:47823/ -UseBasicParsing
 Check ($page.Content -match "<div id=`"root`"") "dashboard served"
 try { Invoke-RestMethod http://127.0.0.1:47823/api/v1/status | Out-Null; Check $false "status requires a token" }

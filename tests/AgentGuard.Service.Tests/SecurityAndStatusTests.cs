@@ -12,7 +12,9 @@ public class SecurityTests
         var anon = f.Client(auth: false);
         var health = await anon.GetJson("/api/v1/health");
         Assert.True(health.GetProperty("ok").GetBoolean());
-        Assert.Equal("0.1.0", health.GetProperty("version").GetString());
+        var built = typeof(Program).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().Single().InformationalVersion.Split('+')[0];
+        Assert.Equal(built, health.GetProperty("version").GetString());
 
         Assert.Equal(HttpStatusCode.OK, (await anon.Decide("claude-code", "shell.exec", "ls")).StatusCode);
         foreach (var path in new[] { "/api/v1/status", "/api/v1/agents", "/api/v1/events", "/api/v1/policy", "/api/v1/settings", "/api/v1/export?format=json", "/api/v1/stream" })
@@ -78,6 +80,10 @@ public class SecurityTests
         var r = await c.PostAsync("/api/v1/decide", new StringContent("{not json", System.Text.Encoding.UTF8, "application/json"));
         Assert.Equal(HttpStatusCode.BadRequest, r.StatusCode);
         Assert.True((await r.Json()).TryGetProperty("error", out _));
+        // Still a JSON 400 (not a 500) for an endpoint with a typed body, and the service keeps serving.
+        var put = await c.PutAsync("/api/v1/settings", new StringContent("[1,2", System.Text.Encoding.UTF8, "application/json"));
+        Assert.Equal(HttpStatusCode.BadRequest, put.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await c.GetAsync("/api/v1/health")).StatusCode);
     }
 
     [Fact]

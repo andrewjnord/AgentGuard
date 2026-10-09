@@ -19,7 +19,17 @@ public sealed record McpServerDto(
 /// <summary>Builds the status and agent views the dashboard and tray read.</summary>
 public sealed class StatusService
 {
-    public const string Version = "0.1.0";
+    /// <summary>The build version (set by the release pipeline with -p:Version), without any "+commit" suffix.</summary>
+    public static readonly string Version = ReadVersion();
+
+    private static string ReadVersion()
+    {
+        var info = typeof(StatusService).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion;
+        if (!string.IsNullOrEmpty(info)) return info.Split('+')[0];
+        return typeof(StatusService).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+    }
 
     private readonly EventStore _store;
     private readonly PolicyManager _policy;
