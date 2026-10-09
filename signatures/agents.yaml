@@ -152,6 +152,8 @@ mcp_clients:
     servers_key: mcpServers
     paths:
       - "%APPDATA%/Claude/claude_desktop_config.json"
+      # Microsoft Store / WinGet / MSIX install: the app's Roaming folder is virtualized into its package.
+      - "%LOCALAPPDATA%/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude_desktop_config.json"
       - "~/Library/Application Support/Claude/claude_desktop_config.json"
       - "~/.config/Claude/claude_desktop_config.json"
 

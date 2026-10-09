@@ -56,6 +56,8 @@ public sealed class AgentLifecycle
     private readonly EventBus _bus;
     private readonly ILogger<AgentLifecycle> _log;
     private readonly ConcurrentDictionary<string, byte> _signerChecked = new();
+    // Agents seen running since the last "agent exited", so a burst of process exits is reported once.
+    private readonly ConcurrentDictionary<string, byte> _running = new();
 
     public AgentLifecycle(AgentRegistry agents, EventStore store, EventPipeline pipeline, ObservationService observe, IEnforcementAdapters adapters, EventBus bus, ILogger<AgentLifecycle> log)
     {
@@ -77,6 +79,7 @@ public sealed class AgentLifecycle
 
         if (a.IsRoot)
         {
+            _running[a.AgentId] = 1;
             var isNew = _agents.Ensure(a.AgentId, a.AgentName, a.Kind, p.ExePath, a.Publisher);
             InspectSigner(a.AgentId, p.ExePath);
             if (isNew)
@@ -111,18 +114,26 @@ public sealed class AgentLifecycle
         }, ct);
     }
 
-    public async Task OnExitedAsync(AttributedProcess a, CancellationToken ct = default)
+    public async Task OnExitedAsync(AttributedProcess a, CancellationToken ct = default, bool reportAgentExit = true)
     {
         try { _store.EndAgentProcess(a.Process.Pid, a.Process.StartTime, DateTimeOffset.UtcNow); }
         catch (Exception ex) { _log.LogDebug(ex, "Could not record exit of {Pid}.", a.Process.Pid); }
-        if (!a.IsRoot || _agents.Attributor.PidsFor(a.AgentId).Count > 0) return;
+        if (reportAgentExit && a.IsRoot) await OnAgentGoneAsync(a, ct);
+    }
+
+    /// <summary>Records "agent exited" once the agent has no processes left (and only once per run of the agent).</summary>
+    public async Task OnAgentGoneAsync(AttributedProcess a, CancellationToken ct = default)
+    {
+        if (_agents.Attributor.PidsFor(a.AgentId).Count > 0) return;
+        if (!_running.TryRemove(a.AgentId, out _)) return; // already reported
+        var record = _agents.Get(a.AgentId);
         await _pipeline.RecordAsync(new EventInput
         {
             AgentId = a.AgentId,
             AgentName = a.AgentName,
             Pid = a.Process.Pid,
             Action = Actions.AgentExited,
-            Target = a.Process.ExePath ?? a.Process.Name,
+            Target = record?.ExePath ?? a.Process.ExePath ?? a.Process.Name,
             Source = EventSources.Discovery,
         }, null, enforced: false, ct);
         _bus.Publish("agentChanged", a.AgentId);

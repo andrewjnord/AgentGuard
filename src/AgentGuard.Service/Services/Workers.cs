@@ -114,7 +114,10 @@ public sealed class DiscoveryWorker : BackgroundService
         foreach (var a in diff.Started.OrderBy(a => a.Process.StartTime))
             await _lifecycle.OnStartedAsync(a, EventSources.Discovery, reportChildren: !first, ct);
         foreach (var a in diff.Exited)
-            await _lifecycle.OnExitedAsync(a, ct);
+            await _lifecycle.OnExitedAsync(a, ct, reportAgentExit: false);
+        // One "agent exited" per agent, not one per process: apps like VS Code run a dozen matching processes.
+        foreach (var agent in diff.Exited.Where(a => a.IsRoot).GroupBy(a => a.AgentId))
+            await _lifecycle.OnAgentGoneAsync(agent.First(), ct);
     }
 }
 

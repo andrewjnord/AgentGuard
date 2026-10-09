@@ -89,6 +89,34 @@ public class AgentsTests
     }
 
     [Fact]
+    public async Task AnAgentWithManyProcessesExitsOnce()
+    {
+        // Regression: closing VS Code (a dozen Code.exe processes, each matching the signature) logged a dozen "Agent exited".
+        var source = new FakeProcessSource();
+        for (var i = 0; i < 12; i++)
+            source.Processes.Add(new ProcessInfo(7000 + i, i == 0 ? 1 : 7000, "Code.exe", "C:/Users/u/AppData/Local/Programs/Microsoft VS Code/Code.exe", "Code.exe", T0.AddSeconds(i)));
+        using var f = new ServiceFixture { ProcessSource = source };
+        var c = f.Client();
+        await Scan(f);
+        Assert.Single((await c.GetJson("/api/v1/events?action=agent.discovered")).GetProperty("items").EnumerateArray());
+
+        source.Processes.RemoveAll(p => p.Pid >= 7006); // some windows close: still running
+        await Scan(f, first: false);
+        Assert.Empty((await c.GetJson("/api/v1/events?action=agent.exited")).GetProperty("items").EnumerateArray());
+
+        source.Processes.Clear(); // the rest close
+        await Scan(f, first: false);
+        Assert.Single((await c.GetJson("/api/v1/events?action=agent.exited")).GetProperty("items").EnumerateArray());
+
+        // Started and closed again: one more.
+        source.Processes.Add(new ProcessInfo(7100, 1, "Code.exe", "C:/Users/u/AppData/Local/Programs/Microsoft VS Code/Code.exe", "Code.exe", DateTimeOffset.UtcNow));
+        await Scan(f, first: false);
+        source.Processes.Clear();
+        await Scan(f, first: false);
+        Assert.Equal(2, (await c.GetJson("/api/v1/events?action=agent.exited")).GetProperty("items").GetArrayLength());
+    }
+
+    [Fact]
     public async Task SuspendResumeTerminateOnlyTouchAgentProcesses()
     {
         using var f0 = new ServiceFixture();
@@ -236,6 +264,21 @@ public class McpTests
 
         Assert.Equal(HttpStatusCode.NotFound, (await c.Send(HttpMethod.Put, "/api/v1/mcp/nope/proxy", new { enabled = true })).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await c.Send(HttpMethod.Put, $"/api/v1/mcp/{id}/proxy", new { })).StatusCode);
+    }
+
+    [Fact]
+    public async Task FindsClaudeDesktopStoreAppConfig()
+    {
+        // Microsoft Store / MSIX installs of Claude Desktop keep their config inside the app package.
+        using var f = new ServiceFixture();
+        var dir = Path.Combine(f.ProfileDir, "AppData", "Local", "Packages", "Claude_pzs8sxrjxfjjc", "LocalCache", "Roaming", "Claude");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "claude_desktop_config.json"),
+            JsonSerializer.Serialize(new { mcpServers = new { local = new { command = "npx", args = new[] { "mcp-remote", "http://127.0.0.1:8000/mcp" } } } }));
+        var servers = await f.Client().PostAsync("/api/v1/mcp/rescan", null).Ok();
+        var s = Assert.Single(servers.EnumerateArray());
+        Assert.Equal("Claude Desktop", s.GetProperty("client").GetString());
+        Assert.Equal("local", s.GetProperty("name").GetString());
     }
 
     [Fact]
