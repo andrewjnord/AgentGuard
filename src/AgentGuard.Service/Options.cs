@@ -17,12 +17,17 @@ public sealed class AgentGuardOptions
     public string InstallDir { get; set; } = AppContext.BaseDirectory;
     /// <summary>Disables the background workers (discovery, telemetry). Used by tests.</summary>
     public bool DisableWorkers { get; set; }
+    /// <summary>Turns off the endpoint enforcement adapters (telemetry, process control, firewall) even where available.</summary>
+    public bool DisableEnforcement { get; set; }
     /// <summary>Overrides the user profile directories scanned for MCP configs (tests).</summary>
     public List<string>? UserProfiles { get; set; }
 
     public string DatabasePath => Path.Combine(DataDir, "agentguard.db");
     public string PolicyPath => Path.Combine(DataDir, "policy.yaml");
     public string TokenPath => Path.Combine(DataDir, "admin.token");
+    /// <summary>Readable by every local user: the port and fail mode, so the proxy and hook know how to behave when the service is down.</summary>
+    public string PublicDir => Path.Combine(DataDir, "public");
+    public string ClientConfigPath => Path.Combine(PublicDir, "client.json");
     public string SignaturesPath => File.Exists(Path.Combine(DataDir, "signatures", "agents.yaml"))
         ? Path.Combine(DataDir, "signatures", "agents.yaml")
         : Path.Combine(AppContext.BaseDirectory, "defaults", "signatures", "agents.yaml");

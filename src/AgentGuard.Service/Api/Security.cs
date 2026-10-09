@@ -57,6 +57,26 @@ internal static class DataDirAcl
     }
 }
 
+/// <summary>The public folder (client.json): readable by every local user, writable only by SYSTEM and Administrators.</summary>
+[SupportedOSPlatform("windows")]
+internal static class PublicDirAcl
+{
+    public static void Apply(string dir)
+    {
+        try
+        {
+            var security = new DirectorySecurity();
+            security.SetAccessRuleProtection(isProtected: true, preserveInheritance: false);
+            var inherit = InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit;
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null), FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null), FileSystemRights.FullControl, inherit, PropagationFlags.None, AccessControlType.Allow));
+            security.AddAccessRule(new FileSystemAccessRule(new SecurityIdentifier(WellKnownSidType.BuiltinUsersSid, null), FileSystemRights.ReadAndExecute, inherit, PropagationFlags.None, AccessControlType.Allow));
+            new DirectoryInfo(dir).SetAccessControl(security);
+        }
+        catch (Exception) { /* not elevated (dev run) */ }
+    }
+}
+
 /// <summary>
 /// Rejects cross-origin and DNS-rebinding requests and requires the admin token on management endpoints.
 /// <c>/api/v1/decide</c>, <c>/api/v1/health</c> and the MCP forwarder are open to local processes: they grant no control.

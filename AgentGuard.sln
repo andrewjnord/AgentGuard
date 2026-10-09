@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentGuard.Core.Tests", "te
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentGuard.Service", "src\AgentGuard.Service\AgentGuard.Service.csproj", "{F5FD06CF-77C6-48C3-A311-F6D5479DADC7}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AgentGuard.Service.Tests", "tests\AgentGuard.Service.Tests\AgentGuard.Service.Tests.csproj", "{3727AF3D-90CA-47C4-89E9-6D6E568BF443}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -34,10 +36,15 @@ Global
 		{F5FD06CF-77C6-48C3-A311-F6D5479DADC7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F5FD06CF-77C6-48C3-A311-F6D5479DADC7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F5FD06CF-77C6-48C3-A311-F6D5479DADC7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3727AF3D-90CA-47C4-89E9-6D6E568BF443}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3727AF3D-90CA-47C4-89E9-6D6E568BF443}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3727AF3D-90CA-47C4-89E9-6D6E568BF443}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3727AF3D-90CA-47C4-89E9-6D6E568BF443}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8B0B5116-D997-4DA9-A115-7BE6A4C0A484} = {335EEF22-342C-4676-8B56-87630B175A64}
 		{D72C0B83-3E8A-4798-AC41-7CB583080652} = {A67E1C44-8511-4EE0-8609-1DC4B674C6CA}
 		{F5FD06CF-77C6-48C3-A311-F6D5479DADC7} = {335EEF22-342C-4676-8B56-87630B175A64}
+		{3727AF3D-90CA-47C4-89E9-6D6E568BF443} = {A67E1C44-8511-4EE0-8609-1DC4B674C6CA}
 	EndGlobalSection
 EndGlobal

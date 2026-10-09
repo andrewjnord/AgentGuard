@@ -5,12 +5,12 @@ using AgentGuard.Core.Storage;
 
 namespace AgentGuard.Service.Services;
 
-/// <summary>Holds "ask" decisions until a person answers or the timeout passes.</summary>
+/// <summary>Holds "ask" decisions until a person answers, the timeout passes, or the kill switch denies them.</summary>
 public sealed class ApprovalBroker
 {
     private readonly EventStore _store;
     private readonly EventBus _bus;
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _pending = new();
+    private readonly ConcurrentDictionary<string, (ApprovalRecord Record, TaskCompletionSource<string> Done)> _pending = new();
 
     public ApprovalBroker(EventStore store, EventBus bus)
     {
@@ -29,6 +29,8 @@ public sealed class ApprovalBroker
 
     public int PendingCount => _pending.Count;
 
+    public IReadOnlyList<string> PendingIds => _pending.Keys.ToList();
+
     public ApprovalRecord Create(AgentEvent e, int timeoutSeconds)
     {
         var a = new ApprovalRecord
@@ -43,40 +45,38 @@ public sealed class ApprovalBroker
             Details = e.Details,
             RuleId = e.RuleId,
         };
-        _pending[a.Id] = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pending[a.Id] = (a, new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously));
         _store.SaveApproval(a);
         _bus.Publish("approval", a);
         return a;
     }
 
-    /// <summary>Waits for a decision: "allow_once", "allow_always", "deny", or "timeout".</summary>
-    public async Task<string> WaitAsync(ApprovalRecord a, CancellationToken ct)
+    /// <summary>Waits for the decision: "allow_once", "allow_always", "deny" or "timeout". Cancellation only stops waiting; the approval stays open until it expires.</summary>
+    public async Task<string> WaitAsync(string id, CancellationToken ct)
     {
-        if (!_pending.TryGetValue(a.Id, out var tcs)) return "timeout";
-        var delay = a.ExpiresAt - DateTimeOffset.UtcNow;
-        if (delay < TimeSpan.Zero) delay = TimeSpan.Zero;
-        var finished = await Task.WhenAny(tcs.Task, Task.Delay(delay, ct));
-        _pending.TryRemove(a.Id, out _);
-        return finished == tcs.Task ? tcs.Task.Result : "timeout";
+        if (!_pending.TryGetValue(id, out var entry))
+            return _store.GetApproval(id)?.Decision ?? "timeout";
+        return await entry.Done.Task.WaitAsync(ct);
     }
 
-    /// <summary>Records a person's decision. Returns null when the approval is unknown or already closed.</summary>
-    public bool Decide(string id, string decision) =>
-        _pending.TryGetValue(id, out var tcs) && tcs.TrySetResult(decision);
-
-    public ApprovalRecord Close(ApprovalRecord a, string decision, string decidedBy)
+    /// <summary>Closes a pending approval exactly once. Returns the closed record, or null when it was unknown or already closed.</summary>
+    public ApprovalRecord? Resolve(string id, string decision, string decidedBy)
     {
-        a.Decision = decision;
+        if (!_pending.TryRemove(id, out var entry)) return null;
+        var a = entry.Record;
+        // The kill switch is recorded as a denial; waiters still learn the real cause.
+        a.Decision = decision == "killswitch" ? "deny" : decision;
         a.DecidedAt = DateTimeOffset.UtcNow;
         a.DecidedBy = decidedBy;
         a.Status = decision switch
         {
             "allow_once" or "allow_always" => "allowed",
-            "deny" => "denied",
+            "deny" or "killswitch" => "denied",
             _ => "expired",
         };
         _store.SaveApproval(a);
         _bus.Publish("approval", a);
+        entry.Done.TrySetResult(decision);
         return a;
     }
 }
@@ -89,26 +89,32 @@ public sealed class DecisionService
     private readonly PolicyManager _policy;
     private readonly SettingsManager _settings;
     private readonly AgentRegistry _agents;
+    private readonly McpManager _mcp;
     private readonly EventBus _bus;
-    private readonly ConcurrentDictionary<string, string> _decidedBy = new();
+    private readonly ILogger<DecisionService> _log;
+    private readonly ConcurrentDictionary<string, (DecideRequest Request, PolicyDecision Decision, long EventId)> _context = new();
 
-    public DecisionService(EventPipeline pipeline, ApprovalBroker approvals, PolicyManager policy, SettingsManager settings, AgentRegistry agents, EventBus bus)
+    public DecisionService(EventPipeline pipeline, ApprovalBroker approvals, PolicyManager policy, SettingsManager settings,
+        AgentRegistry agents, McpManager mcp, EventBus bus, ILogger<DecisionService> log)
     {
         _pipeline = pipeline;
         _approvals = approvals;
         _policy = policy;
         _settings = settings;
         _agents = agents;
+        _mcp = mcp;
         _bus = bus;
+        _log = log;
     }
 
     public async Task<DecideResponse> DecideAsync(DecideRequest req, CancellationToken ct)
     {
-        var agentName = req.AgentName ?? req.AgentId;
+        var agentName = string.IsNullOrWhiteSpace(req.AgentName) ? req.AgentId : req.AgentName;
         var kind = req.AgentId.StartsWith("mcp:", StringComparison.Ordinal) ? AgentKinds.McpServer
             : req.Source == EventSources.Hook ? AgentKinds.Cli : AgentKinds.Unknown;
         if (_agents.Ensure(req.AgentId, agentName, kind)) _bus.Publish("agentChanged", req.AgentId);
         if (req.Source == EventSources.Hook) _agents.MarkHookSeen(req.AgentId);
+        if (req.Action == Actions.McpCall) _mcp.TouchCall(req.AgentId);
 
         var input = new EventInput
         {
@@ -124,7 +130,8 @@ public sealed class DecisionService
         };
         var decision = _pipeline.Evaluate(input);
         var holds = decision.Effective is Verdict.Block or Verdict.Ask;
-        var e = await _pipeline.RecordAsync(input, decision, enforced: holds, ct);
+        // The request is already in flight: record it even if the caller goes away.
+        var e = await _pipeline.RecordAsync(input, decision, enforced: holds, CancellationToken.None);
 
         if (decision.Effective != Verdict.Ask)
         {
@@ -134,13 +141,16 @@ public sealed class DecisionService
                 Verdict = allowed ? "allow" : "block",
                 PolicyVerdict = decision.RuleVerdict,
                 RuleId = decision.RuleId,
-                Reason = allowed ? decision.Reason : "Blocked by AgentGuard: " + decision.Reason,
+                Reason = allowed ? (decision.Reason.Length > 0 ? decision.Reason : "Allowed by AgentGuard.") : "Blocked by AgentGuard: " + decision.Reason,
                 EventId = e.Id,
             };
         }
 
         var timeout = decision.TimeoutSeconds > 0 ? decision.TimeoutSeconds : _settings.Current.ApprovalTimeoutSeconds;
         var approval = _approvals.Create(e, timeout);
+        _context[approval.Id] = (req, decision, e.Id);
+        _ = ExpireLaterAsync(approval.Id, TimeSpan.FromSeconds(timeout));
+
         if (req.Wait == false)
         {
             return new DecideResponse
@@ -148,44 +158,14 @@ public sealed class DecisionService
                 Verdict = "block",
                 PolicyVerdict = Verdict.Ask,
                 RuleId = decision.RuleId,
-                Reason = "Waiting for approval in AgentGuard.",
+                Reason = "Blocked by AgentGuard: waiting for approval in AgentGuard. Retry after it is approved.",
                 EventId = e.Id,
                 ApprovalId = approval.Id,
             };
         }
 
-        var answer = await _approvals.WaitAsync(approval, ct);
-        var by = _decidedBy.TryRemove(approval.Id, out var who) ? who : answer == "timeout" ? "timeout" : "user";
-        _approvals.Close(approval, answer, by);
-
-        var final = answer switch
-        {
-            "allow_once" or "allow_always" => true,
-            "deny" => false,
-            _ => decision.OnTimeout == Verdict.Allow,
-        };
-        string? addedRule = null;
-        if (answer == "allow_always") addedRule = _policy.AddAllowRule(req.AgentId, req.Action, req.Target, by);
-
-        await _pipeline.RecordAsync(new EventInput
-        {
-            AgentId = req.AgentId,
-            AgentName = agentName,
-            Pid = req.Pid,
-            Action = Actions.ApprovalDecided,
-            Target = req.Target,
-            Details = new()
-            {
-                ["approvalId"] = approval.Id,
-                ["eventId"] = e.Id,
-                ["requestedAction"] = req.Action,
-                ["decision"] = answer,
-                ["decidedBy"] = by,
-                ["addedRule"] = addedRule,
-            },
-            Source = EventSources.System,
-        }, new PolicyDecision(final ? Verdict.Allow : Verdict.Block, final ? Verdict.Allow : Verdict.Block, decision.RuleId, decision.Severity, false, "", 0, Verdict.Block), enforced: true, ct);
-
+        var answer = await _approvals.WaitAsync(approval.Id, ct);
+        var final = Allowed(answer, decision.OnTimeout);
         return new DecideResponse
         {
             Verdict = final ? "allow" : "block",
@@ -196,19 +176,77 @@ public sealed class DecisionService
                 "allow_once" => "Approved once by the user in AgentGuard.",
                 "allow_always" => "Approved permanently by the user in AgentGuard.",
                 "deny" => "Blocked by AgentGuard: the user denied this action.",
-                _ => final ? "Approval timed out; allowed by policy." : "Blocked by AgentGuard: no approval within " + timeout + " seconds.",
+                "killswitch" => "Blocked by AgentGuard: the kill switch is engaged.",
+                _ => final ? "Approval timed out; allowed by policy." : $"Blocked by AgentGuard: no approval within {timeout} seconds.",
             },
             EventId = e.Id,
             ApprovalId = approval.Id,
         };
     }
 
-    /// <summary>Called from the API when a person answers an approval.</summary>
-    public bool Answer(string approvalId, string decision, string decidedBy)
+    private static bool Allowed(string answer, Verdict onTimeout) => answer switch
     {
-        _decidedBy[approvalId] = decidedBy;
-        if (_approvals.Decide(approvalId, decision)) return true;
-        _decidedBy.TryRemove(approvalId, out _);
-        return false;
+        "allow_once" or "allow_always" => true,
+        "timeout" => onTimeout == Verdict.Allow,
+        _ => false,
+    };
+
+    private async Task ExpireLaterAsync(string approvalId, TimeSpan after)
+    {
+        try
+        {
+            await Task.Delay(after);
+            await ResolveAsync(approvalId, "timeout", "timeout");
+        }
+        catch (Exception ex) { _log.LogWarning(ex, "Failed to expire approval {Id}.", approvalId); }
+    }
+
+    /// <summary>
+    /// Closes an approval (from a person, a timeout or the kill switch), adds the allow rule for "allow always",
+    /// and records the outcome. Returns null when the approval is unknown or already closed.
+    /// </summary>
+    public async Task<ApprovalRecord?> ResolveAsync(string approvalId, string decision, string decidedBy)
+    {
+        var closed = _approvals.Resolve(approvalId, decision, decidedBy);
+        if (closed is null) return null;
+        if (!_context.TryRemove(approvalId, out var ctx)) return closed;
+
+        var final = Allowed(decision, ctx.Decision.OnTimeout);
+        string? addedRule = null;
+        if (decision == "allow_always")
+        {
+            try { addedRule = _policy.AddAllowRule(ctx.Request.AgentId, ctx.Request.Action, ctx.Request.Target, decidedBy); }
+            catch (Exception ex) { _log.LogError(ex, "Could not add the allow rule for approval {Id}.", approvalId); }
+        }
+
+        await _pipeline.RecordAsync(new EventInput
+        {
+            AgentId = ctx.Request.AgentId,
+            AgentName = closed.AgentName,
+            Pid = ctx.Request.Pid,
+            Action = Actions.ApprovalDecided,
+            Target = closed.Target,
+            Details = new()
+            {
+                ["approvalId"] = approvalId,
+                ["eventId"] = ctx.EventId,
+                ["requestedAction"] = ctx.Request.Action,
+                ["decision"] = decision,
+                ["decidedBy"] = decidedBy,
+                ["addedRule"] = addedRule,
+            },
+            Source = EventSources.System,
+        }, new PolicyDecision(final ? Verdict.Allow : Verdict.Block, final ? Verdict.Allow : Verdict.Block, ctx.Decision.RuleId,
+            ctx.Decision.Severity, false, "", 0, Verdict.Block), enforced: true);
+        return closed;
+    }
+
+    /// <summary>Denies every open approval (the kill switch was engaged).</summary>
+    public async Task<int> DenyAllPendingAsync(string decidedBy)
+    {
+        var n = 0;
+        foreach (var id in _approvals.PendingIds)
+            if (await ResolveAsync(id, "killswitch", decidedBy) is not null) n++;
+        return n;
     }
 }

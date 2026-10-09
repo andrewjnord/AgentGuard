@@ -11,6 +11,8 @@ public sealed class AgentRegistry
     private readonly EventStore _store;
     private readonly ConcurrentDictionary<string, AgentRecord> _agents = new();
     private readonly ConcurrentDictionary<string, byte> _hooksSeen = new();
+    // Demo mode only: process ids shown for simulated agents (never acted on, the guard requires real attribution).
+    private readonly ConcurrentDictionary<string, IReadOnlyList<int>> _simulatedPids = new();
 
     public AgentAttributor Attributor { get; }
 
@@ -27,7 +29,17 @@ public sealed class AgentRegistry
 
     public string TrustOf(string id) => Get(id)?.Trust ?? "unknown";
 
-    public IReadOnlyList<int> Pids(string id) => Attributor.PidsFor(id);
+    public IReadOnlyList<int> Pids(string id)
+    {
+        var real = Attributor.PidsFor(id);
+        return real.Count == 0 && _simulatedPids.TryGetValue(id, out var sim) ? sim : real;
+    }
+
+    public void SetSimulatedPids(string id, IReadOnlyList<int> pids)
+    {
+        if (pids.Count == 0) _simulatedPids.TryRemove(id, out _);
+        else _simulatedPids[id] = pids;
+    }
 
     public bool IsRunning(string id) => Pids(id).Count > 0;
 
@@ -58,6 +70,23 @@ public sealed class AgentRegistry
     {
         if (!_agents.TryGetValue(id, out var a)) return null;
         a.Trust = trust;
+        _store.UpsertAgent(a);
+        return a;
+    }
+
+    public AgentRecord? SetNetworkBlocked(string id, bool blocked)
+    {
+        if (!_agents.TryGetValue(id, out var a)) return null;
+        a.NetworkBlocked = blocked;
+        _store.UpsertAgent(a);
+        return a;
+    }
+
+    public AgentRecord? SetSigner(string id, string? publisher, bool? signerValid)
+    {
+        if (!_agents.TryGetValue(id, out var a)) return null;
+        if (publisher is not null) a.Publisher = publisher;
+        a.SignerValid = signerValid;
         _store.UpsertAgent(a);
         return a;
     }

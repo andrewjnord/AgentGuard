@@ -28,6 +28,7 @@ public sealed class StatusService
     private readonly KillSwitch _killSwitch;
     private readonly ApprovalBroker _approvals;
     private readonly IEnforcementAdapters _adapters;
+    private readonly EnforcementService _enforcement;
     private readonly AgentGuardOptions _options;
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
 
@@ -35,7 +36,7 @@ public sealed class StatusService
     public bool? LastIntegrityOk { get; set; }
 
     public StatusService(EventStore store, PolicyManager policy, AgentRegistry agents, McpManager mcp, KillSwitch killSwitch,
-        ApprovalBroker approvals, IEnforcementAdapters adapters, AgentGuardOptions options)
+        ApprovalBroker approvals, IEnforcementAdapters adapters, EnforcementService enforcement, AgentGuardOptions options)
     {
         _store = store;
         _policy = policy;
@@ -44,8 +45,11 @@ public sealed class StatusService
         _killSwitch = killSwitch;
         _approvals = approvals;
         _adapters = adapters;
+        _enforcement = enforcement;
         _options = options;
     }
+
+    public DateTimeOffset StartedAt => _startedAt;
 
     public object Status()
     {
@@ -73,7 +77,7 @@ public sealed class StatusService
                 openAlerts = _store.CountAlerts("open"),
                 pendingApprovals = _approvals.PendingCount,
             },
-            killSwitch = new { engaged = _killSwitch.Engaged, since = _killSwitch.Since, suspendedPids = 0 },
+            killSwitch = new { engaged = _killSwitch.Engaged, since = _killSwitch.Since, suspendedPids = _enforcement.SuspendedCount },
             integrity = new { lastVerifiedAt = LastIntegrityCheck, ok = LastIntegrityOk },
             capabilities = new
             {
@@ -110,7 +114,7 @@ public sealed class StatusService
         var hooks = _agents.HookSeen(a.Id);
         activity.TryGetValue(a.Id, out var act);
         return new AgentDto(a.Id, a.Kind, a.Name, a.ExePath, a.Publisher, a.SignerValid, a.FirstSeen, a.LastSeen, a.Trust,
-            _agents.IsRunning(a.Id), _agents.Pids(a.Id), false,
+            _agents.IsRunning(a.Id), _agents.Pids(a.Id), a.NetworkBlocked,
             new EnforcementDto(hooks, proxied, _adapters.Firewall, _adapters.ProcessControl, !hooks && !proxied),
             act?.Total ?? 0, act?.Blocked ?? 0, related.Select(s => s.Id).ToList());
     }
