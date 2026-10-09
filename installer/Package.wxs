@@ -81,6 +81,19 @@
     <CustomAction Id="CleanupIntegrations" BinaryRef="Wix4UtilCA_$(sys.BUILDARCHSHORT)" DllEntry="WixQuietExec"
                   Execute="deferred" Impersonate="no" Return="ignore" />
 
+    <!--
+      Start (or restart) the tray once an interactive install, upgrade or repair has finished. This runs in the UI
+      sequence, which belongs to the signed-in user's own unelevated msiexec process, so the tray is not started
+      elevated. Silent installs (/qn, used by fleet tools running as SYSTEM) have no UI sequence and skip it; the tray
+      then starts at the user's next sign-in from the Run key. "--background" makes a second copy exit quietly
+      instead of opening the dashboard.
+    -->
+    <CustomAction Id="LaunchTray" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]AgentGuard.Tray.exe&quot; --background"
+                  Execute="immediate" Impersonate="yes" Return="asyncNoWait" />
+    <InstallUISequence>
+      <Custom Action="LaunchTray" After="ExecuteAction" Condition="NOT (REMOVE = &quot;ALL&quot;)" />
+    </InstallUISequence>
+
     <InstallExecuteSequence>
       <Custom Action="RegisterClaudeHook" After="InstallFiles" Condition="NOT REMOVE AND INSTALLCLAUDEHOOK = 1" />
       <Custom Action="CleanupIntegrations" After="StopServices" Condition="REMOVE = &quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />

@@ -46,7 +46,13 @@ public partial class App : System.Windows.Application
         _single = new Mutex(initiallyOwned: true, InstanceName, out var first);
         if (!first)
         {
-            if (EventWaitHandle.TryOpenExisting(ShowEventName, out var existing)) { existing.Set(); existing.Dispose(); }
+            // The installer relaunches the tray with --background: if one is already running, leave it alone.
+            // Any other second launch (Start menu shortcut) asks the running copy to open the dashboard.
+            if (!e.Args.Contains("--background") && EventWaitHandle.TryOpenExisting(ShowEventName, out var existing))
+            {
+                existing.Set();
+                existing.Dispose();
+            }
             Shutdown();
             return;
         }

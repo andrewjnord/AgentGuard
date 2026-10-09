@@ -27,7 +27,7 @@ Without them the pipeline still builds an unsigned MSI. Signing uses SHA-256 wit
 
 - Installs to `C:\Program Files\AgentGuard`, registers the `AgentGuard` service (LocalSystem, automatic start, restart on failure), starts the tray for every user at sign-in, and adds a Start menu shortcut that opens the dashboard.
 - Registers the Claude Code PreToolUse hook machine-wide in `C:\Program Files\ClaudeCode\managed-settings.d\agentguard.json`. Skip with `msiexec /i AgentGuard.msi INSTALLCLAUDEHOOK=0`.
-- Upgrades in place (major upgrade); downgrades are refused.
+- Upgrades in place (major upgrade); downgrades are refused. Windows asks to close the running tray during an upgrade; an interactive install starts it again when it finishes (silent `/qn` installs leave that to the next sign-in).
 - Uninstall first runs `agentguard cleanup-integrations` so MCP clients routed through the proxy get their original configuration back and the Claude Code hook is removed, then removes the program. The data folder `C:\ProgramData\AgentGuard` (audit log, policy history) is kept as evidence; delete it by hand if it is not needed.
 
 Silent install for fleet deployment: `msiexec /i AgentGuard-<version>-x64.msi /qn /l*v install.log`.
