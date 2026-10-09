@@ -58,7 +58,8 @@
         <Shortcut Id="TrayShortcut" Name="AgentGuard" Description="Open the AgentGuard dashboard"
                   Target="[INSTALLFOLDER]AgentGuard.Tray.exe" Arguments="--open" WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
-        <RegistryValue Root="HKLM" Key="SOFTWARE\AgentGuard" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
+        <!-- Windows Installer tracks Start menu shortcuts with a current-user key (ICE38/ICE43/ICE57). -->
+        <RegistryValue Root="HKCU" Key="Software\AgentGuard" Name="StartMenuShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </ComponentGroup>
 
