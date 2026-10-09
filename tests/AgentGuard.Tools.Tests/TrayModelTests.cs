@@ -78,3 +78,19 @@ public class TrayModelTests
         Assert.Equal("expired", TrayModel.Countdown(now.AddSeconds(-1), now));
     }
 }
+
+public class TrayBuildTests
+{
+    /// <summary>Regression: with invariant globalization WPF crashed the first time a window drew text (the approval pop-up).</summary>
+    [Fact]
+    public void TrayIsNotBuiltWithInvariantGlobalization()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "AgentGuard.sln"))) dir = dir.Parent;
+        Assert.NotNull(dir);
+        var csproj = File.ReadAllText(Path.Combine(dir!.FullName, "src", "AgentGuard.Tray", "AgentGuard.Tray.csproj"));
+        Assert.DoesNotContain("<InvariantGlobalization>true", csproj);
+        var publish = File.ReadAllText(Path.Combine(dir.FullName, "build", "publish.ps1"));
+        Assert.DoesNotContain("InvariantGlobalization=true", publish);
+    }
+}

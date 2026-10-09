@@ -16,9 +16,33 @@ public partial class App : System.Windows.Application
     private EventWaitHandle? _showEvent;
     private TrayController? _tray;
 
+    public static string LogPath { get; } = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AgentGuard", "tray.log");
+
+    /// <summary>Appends to %LOCALAPPDATA%\AgentGuard\tray.log (kept under 1 MB).</summary>
+    public static void Log(string message)
+    {
+        try
+        {
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(LogPath)!);
+            var info = new System.IO.FileInfo(LogPath);
+            if (info.Exists && info.Length > 1_000_000) info.Delete();
+            System.IO.File.AppendAllText(LogPath, $"{DateTimeOffset.Now:yyyy-MM-dd HH:mm:ss.fff zzz} {message}{Environment.NewLine}");
+        }
+        catch { }
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // A UI error must not take the tray (and the approval prompts) down with it: log it and carry on.
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log("UI error: " + args.Exception);
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) => Log("Fatal error: " + args.ExceptionObject);
+        TaskScheduler.UnobservedTaskException += (_, args) => { Log("Background error: " + args.Exception); args.SetObserved(); };
         _single = new Mutex(initiallyOwned: true, InstanceName, out var first);
         if (!first)
         {
