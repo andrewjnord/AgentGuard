@@ -3,7 +3,7 @@ import { Bell, CircleCheck, CircleHelp, CircleX, Fingerprint, RefreshCw, ShieldC
 import type { ActivityStats, Alert, Capabilities } from '../api/types';
 import { ActivityChart, ChartLegend } from '../components/ActivityChart';
 import { Empty, ErrorBanner, SeverityBadge, Skeleton } from '../components/ui';
-import { ago, errMsg, num, plural, stamp } from '../lib/format';
+import { ago, errMsg, killSwitchEffect, num, plural, stamp } from '../lib/format';
 import { useAsync } from '../lib/hooks';
 import { href } from '../lib/router';
 import { useApp, useStream } from '../lib/store';
@@ -44,7 +44,7 @@ function Posture() {
   if (!status) return null;
   const { mode, counts, killSwitch } = status;
   const sentence = killSwitch.engaged
-    ? 'All agents are suspended by the kill switch.'
+    ? `Kill switch engaged: ${killSwitchEffect(status.capabilities)}.`
     : mode === 'monitor'
       ? `Watching ${plural(counts.activeAgents, 'active agent')}. Nothing is being blocked in monitor mode.`
       : mode === 'strict'

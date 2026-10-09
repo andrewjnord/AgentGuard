@@ -58,3 +58,19 @@ export const actionLabel = (a: string) => ACTION_LABELS[a] ?? a;
 export const SOURCE_LABELS: Record<string, string> = {
   hook: 'Agent hook', 'mcp-proxy': 'MCP proxy', etw: 'ETW sensor', discovery: 'Discovery', system: 'System', demo: 'Demo',
 };
+
+type Caps = { processControl: boolean; firewall: boolean };
+
+/** What the kill switch actually does on this machine, so the UI never claims more than the service can enforce. */
+export function killSwitchEffect(caps: Caps | undefined): string {
+  const parts = ['every action checked by AgentGuard is blocked'];
+  if (caps?.processControl) parts.push('AI agent processes are suspended');
+  if (caps?.firewall) parts.push('their network access is cut');
+  return parts.length === 1 ? parts[0] : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+}
+
+/** Sentence-case version for the start of a sentence. */
+export function KillSwitchEffect(caps: Caps | undefined): string {
+  const s = killSwitchEffect(caps);
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}

@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import type { Mode } from '../api/types';
 import { MODES } from '../api/types';
-import { duration, errMsg, num } from '../lib/format';
+import { duration, errMsg, KillSwitchEffect, num } from '../lib/format';
 import { href, type Page } from '../lib/router';
 import { useApp } from '../lib/store';
 import { Logo } from './Logo';
@@ -69,38 +69,62 @@ function KillSwitch() {
     try {
       const s = await api.killSwitch(action);
       setStatus(s);
-      toast(action === 'release' ? 'Agents released' : action === 'terminate' ? 'All agents terminated' : `Kill switch engaged: ${num(s.killSwitch.suspendedPids)} processes suspended`, 'ok');
+      toast(action === 'release' ? 'Kill switch released'
+        : !s.capabilities.processControl ? 'Kill switch engaged: checked actions are blocked'
+        : action === 'terminate' ? 'All agents terminated'
+        : `Kill switch engaged: ${num(s.killSwitch.suspendedPids)} processes suspended`, 'ok');
       setOpen(false);
     } catch (e) { toast(errMsg(e), 'error'); } finally { setBusy(false); }
   };
   const active = status?.counts.activeAgents ?? 0;
+  const caps = status?.capabilities;
+  const canSuspend = caps?.processControl ?? false;
   return (
     <>
       <button className={`kill ${engaged ? 'engaged' : ''}`} onClick={() => setOpen(true)} aria-haspopup="dialog">
         {engaged ? <Play size={15} /> : <OctagonX size={16} />}
-        {engaged ? 'Release agents' : 'Kill switch'}
+        {engaged ? (canSuspend ? 'Release agents' : 'Release kill switch') : 'Kill switch'}
       </button>
       {open && !engaged && (
         <Dialog title="Stop every AI agent on this PC?" onClose={() => setOpen(false)}
           footer={<>
             <button className="btn" onClick={() => setOpen(false)} data-autofocus>Cancel</button>
-            <button className="btn danger-outline" onClick={() => void run('terminate')} disabled={busy}>Terminate all</button>
-            <button className="btn danger" onClick={() => void run('engage')} disabled={busy}><OctagonX size={15} />{busy ? 'Engaging…' : 'Suspend all agents'}</button>
+            {canSuspend && <button className="btn danger-outline" onClick={() => void run('terminate')} disabled={busy}>Terminate all</button>}
+            <button className="btn danger" onClick={() => void run('engage')} disabled={busy}><OctagonX size={15} />{busy ? 'Engaging…' : canSuspend ? 'Suspend all agents' : 'Engage kill switch'}</button>
           </>}>
-          <p className="ink2">
-            The kill switch suspends all {num(active)} running agents and their child processes, and blocks their network access.
-            Nothing is lost: you can release them from the same button.
-          </p>
-          <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Terminate ends the processes instead. Unsaved work in those agents will be lost.</p>
+          {canSuspend ? (
+            <>
+              <p className="ink2">
+                The kill switch suspends all {num(active)} running agents and their child processes{caps?.firewall ? ', and blocks their network access' : ''}.
+                Every action checked by AgentGuard is blocked. Nothing is lost: you can release them from the same button.
+              </p>
+              <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>Terminate ends the processes instead. Unsaved work in those agents will be lost.</p>
+            </>
+          ) : (
+            <>
+              <p className="ink2">
+                The kill switch blocks every action checked by AgentGuard (Claude Code hook and MCP proxy) and denies open approvals.
+                You can release it from the same button.
+              </p>
+              <p className="muted" style={{ fontSize: 'var(--fs-sm)' }}>
+                Process control is not available on this PC, so running agents are not suspended. Activity that does not pass through the hook or proxy is still only recorded.
+              </p>
+            </>
+          )}
         </Dialog>
       )}
       {open && engaged && (
-        <Dialog title="Release suspended agents?" onClose={() => setOpen(false)}
+        <Dialog title={canSuspend ? 'Release suspended agents?' : 'Release the kill switch?'} onClose={() => setOpen(false)}
           footer={<>
-            <button className="btn" onClick={() => setOpen(false)} data-autofocus>Keep suspended</button>
-            <button className="btn primary" onClick={() => void run('release')} disabled={busy}><Play size={15} />{busy ? 'Releasing…' : 'Release agents'}</button>
+            <button className="btn" onClick={() => setOpen(false)} data-autofocus>{canSuspend ? 'Keep suspended' : 'Keep engaged'}</button>
+            <button className="btn primary" onClick={() => void run('release')} disabled={busy}><Play size={15} />{busy ? 'Releasing…' : canSuspend ? 'Release agents' : 'Release'}</button>
           </>}>
-          <p className="ink2">{num(status?.killSwitch.suspendedPids ?? 0)} suspended processes will resume and their network access will be restored. The policy applies to them again immediately.</p>
+          <p className="ink2">
+            {canSuspend
+              ? `${num(status?.killSwitch.suspendedPids ?? 0)} suspended processes will resume${caps?.firewall ? ' and their network access will be restored' : ''}. `
+              : ''}
+            The policy applies again immediately.
+          </p>
         </Dialog>
       )}
     </>
@@ -158,7 +182,7 @@ export function Shell({ page, theme, onToggleTheme, children }: { page: Page; th
         {engaged && (
           <div className="banner kill-banner" role="alert">
             <OctagonX size={16} />
-            <span><strong>Kill switch engaged.</strong> All AI agents are suspended and cut off from the network{status?.killSwitch.since ? ` since ${new Date(status.killSwitch.since).toLocaleTimeString()}` : ''}.</span>
+            <span><strong>Kill switch engaged{status?.killSwitch.since ? ` since ${new Date(status.killSwitch.since).toLocaleTimeString()}` : ''}.</strong> {KillSwitchEffect(status?.capabilities)}.</span>
           </div>
         )}
         {children}

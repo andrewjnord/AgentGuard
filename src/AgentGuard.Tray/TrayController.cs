@@ -71,7 +71,7 @@ public sealed class TrayController : IDisposable
         _approvals.Text = s.PendingApprovals > 0 ? $"Approvals ({s.PendingApprovals} waiting)" : "Approvals";
         _killSwitch.Text = s.KillSwitch ? "Release kill switch" : "Emergency stop (kill switch)…";
         if (s.KillSwitch && !wasKill && connected)
-            _icon.ShowBalloonTip(5000, "AgentGuard kill switch engaged", "AI agents are stopped and every checked action is blocked.", Forms.ToolTipIcon.Warning);
+            _icon.ShowBalloonTip(5000, "AgentGuard kill switch engaged", "Every action checked by AgentGuard is blocked until you release it.", Forms.ToolTipIcon.Warning);
     }
 
     private async Task ToggleProtectionAsync()
@@ -103,7 +103,7 @@ public sealed class TrayController : IDisposable
                 return;
             }
             var ok = System.Windows.MessageBox.Show(
-                "Engage the kill switch?\n\nEvery action checked by AgentGuard will be blocked, open approvals are denied, and AI agent processes are suspended where supported. Release it from this menu.",
+                "Engage the kill switch?\n\nEvery action checked by AgentGuard will be blocked and open approvals are denied. AI agent processes are also suspended on PCs where process control is available. Release it from this menu.",
                 "AgentGuard emergency stop", MessageBoxButton.OKCancel, MessageBoxImage.Stop, MessageBoxResult.Cancel);
             if (ok == MessageBoxResult.OK) Apply(TrayModel.FromStatus(await _service.KillSwitchAsync("engage")));
         }
