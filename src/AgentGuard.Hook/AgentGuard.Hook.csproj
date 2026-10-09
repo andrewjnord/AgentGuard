@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>agentguard-hook</AssemblyName>
+    <RootNamespace>AgentGuard.Hook</RootNamespace>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Runs once per tool call: start fast. -->
+    <TieredCompilation>true</TieredCompilation>
+    <TieredPGO>true</TieredPGO>
+    <UseSystemResourceKeys>true</UseSystemResourceKeys>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\AgentGuard.Core\AgentGuard.Core.csproj" />
+  </ItemGroup>
+</Project>
