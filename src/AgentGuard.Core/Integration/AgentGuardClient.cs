@@ -8,17 +8,20 @@ public sealed class AgentGuardClient : IDisposable
 {
     public const int DefaultPort = 47823;
     public const string TokenHeader = "X-AgentGuard-Token";
+    /// <summary>Names the caller of a management change in the audit trail ("tray", "cli").</summary>
+    public const string ActorHeader = "X-AgentGuard-Actor";
 
     private readonly HttpClient _http;
 
     public Uri BaseAddress => _http.BaseAddress!;
 
-    public AgentGuardClient(string? baseUrl = null, string? token = null, TimeSpan? timeout = null, HttpMessageHandler? handler = null)
+    public AgentGuardClient(string? baseUrl = null, string? token = null, TimeSpan? timeout = null, HttpMessageHandler? handler = null, string? actor = null)
     {
         _http = handler is null ? new HttpClient() : new HttpClient(handler);
         _http.BaseAddress = new Uri(baseUrl ?? DefaultBaseUrl());
         _http.Timeout = timeout ?? TimeSpan.FromSeconds(30);
         if (!string.IsNullOrEmpty(token)) _http.DefaultRequestHeaders.Add(TokenHeader, token);
+        if (!string.IsNullOrEmpty(actor)) _http.DefaultRequestHeaders.Add(ActorHeader, actor);
     }
 
     public static string DefaultBaseUrl() =>

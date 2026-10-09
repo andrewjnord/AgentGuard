@@ -1,0 +1,34 @@
+<Window x:Class="AgentGuard.Tray.ApprovalWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="AgentGuard approval"
+        Width="420" SizeToContent="Height"
+        WindowStyle="None" ResizeMode="NoResize" AllowsTransparency="True" Background="Transparent"
+        Topmost="True" ShowInTaskbar="False" ShowActivated="False"
+        AutomationProperties.Name="AgentGuard approval request">
+  <Border Background="{StaticResource Surface}" BorderBrush="{StaticResource Line}" BorderThickness="1" CornerRadius="8" Margin="8">
+    <Border.Effect>
+      <DropShadowEffect BlurRadius="16" ShadowDepth="2" Opacity="0.25"/>
+    </Border.Effect>
+    <StackPanel Margin="16,14,16,14">
+      <DockPanel LastChildFill="True">
+        <TextBlock x:Name="Countdown" DockPanel.Dock="Right" Foreground="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center"/>
+        <TextBlock Text="Approval needed" FontWeight="SemiBold" FontSize="14" Foreground="{StaticResource Ink}"/>
+      </DockPanel>
+      <TextBlock x:Name="Headline" Margin="0,10,0,4" FontSize="13" Foreground="{StaticResource Ink}" TextWrapping="Wrap"/>
+      <Border Background="#F4F6F8" CornerRadius="4" Padding="8,6">
+        <TextBlock x:Name="Target" FontFamily="Consolas, Cascadia Mono, Courier New" FontSize="12" TextWrapping="Wrap"
+                   Foreground="{StaticResource Ink}" MaxHeight="96" TextTrimming="CharacterEllipsis"/>
+      </Border>
+      <TextBlock x:Name="Rule" Margin="0,8,0,0" FontSize="12" Foreground="{StaticResource Muted}" TextWrapping="Wrap"/>
+      <TextBlock x:Name="ErrorText" Margin="0,6,0,0" FontSize="12" Foreground="{StaticResource Danger}" TextWrapping="Wrap" Visibility="Collapsed"/>
+      <!-- No default button: a stray Enter key must never approve anything. -->
+      <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,14,0,0">
+        <Button x:Name="DenyButton" Style="{StaticResource Btn}" Content="Deny" Click="Deny_Click"/>
+        <Button x:Name="AlwaysButton" Style="{StaticResource Btn}" Content="Always allow" Click="Always_Click"
+                ToolTip="Adds a rule to the policy so this exact action is allowed for this agent from now on."/>
+        <Button x:Name="OnceButton" Style="{StaticResource Btn}" Content="Allow once" Click="Once_Click"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</Window>

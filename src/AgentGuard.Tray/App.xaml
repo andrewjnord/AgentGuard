@@ -1,0 +1,19 @@
+<Application x:Class="AgentGuard.Tray.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             ShutdownMode="OnExplicitShutdown">
+  <Application.Resources>
+    <SolidColorBrush x:Key="Ink" Color="#1B1F24"/>
+    <SolidColorBrush x:Key="Muted" Color="#5B6470"/>
+    <SolidColorBrush x:Key="Surface" Color="#FFFFFF"/>
+    <SolidColorBrush x:Key="Line" Color="#D9DEE4"/>
+    <SolidColorBrush x:Key="Accent" Color="#1F6FEB"/>
+    <SolidColorBrush x:Key="Danger" Color="#C62828"/>
+    <Style x:Key="Btn" TargetType="Button">
+      <Setter Property="Padding" Value="14,6"/>
+      <Setter Property="Margin" Value="6,0,0,0"/>
+      <Setter Property="MinWidth" Value="88"/>
+      <Setter Property="FontSize" Value="13"/>
+    </Style>
+  </Application.Resources>
+</Application>
