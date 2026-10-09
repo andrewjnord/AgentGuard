@@ -98,9 +98,18 @@ public sealed class McpGate
             Make(Actions.McpCall, $"{_server}/{tool}", new() { ["server"] = _server, ["tool"] = tool, ["arguments"] = args, ["client"] = ClientName }),
         };
         foreach (var d in McpArgumentInspector.Derive(tool, arguments))
-            list.Add(Make(d.Action, d.Target, new() { ["server"] = _server, ["tool"] = tool, ["derivedFrom"] = "mcp.call", ["client"] = ClientName }));
+        {
+            var target = d.Action.StartsWith("file.", StringComparison.Ordinal) ? ExpandHome(d.Target) : d.Target;
+            list.Add(Make(d.Action, target, new() { ["server"] = _server, ["tool"] = tool, ["derivedFrom"] = "mcp.call", ["client"] = ClientName }));
+        }
         return list;
     }
+
+    /// <summary>"~/x" means the user's home to the server, so path rules must see it that way too.</summary>
+    private string ExpandHome(string path) =>
+        UserProfile is { Length: > 0 } home && (path == "~" || path.StartsWith("~/", StringComparison.Ordinal) || path.StartsWith("~\\", StringComparison.Ordinal))
+            ? Path.Combine(home, path.Length > 2 ? path[2..] : "")
+            : path;
 
     private DecideRequest Make(string action, string target, Dictionary<string, object?> details) => new()
     {
