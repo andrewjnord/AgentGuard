@@ -20,5 +20,6 @@
     <ProjectReference Include="..\..\src\AgentGuard.Service\AgentGuard.Service.csproj" />
     <ProjectReference Include="..\..\src\AgentGuard.McpProxy\AgentGuard.McpProxy.csproj" />
     <ProjectReference Include="..\..\src\AgentGuard.Hook\AgentGuard.Hook.csproj" />
+    <ProjectReference Include="..\..\src\AgentGuard.Cli\AgentGuard.Cli.csproj" />
   </ItemGroup>
 </Project>
