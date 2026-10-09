@@ -3,6 +3,7 @@ using System.Text.Json;
 using AgentGuard.Core;
 using AgentGuard.Core.Integration;
 using AgentGuard.Core.Policy;
+using AgentGuard.Core.Discovery;
 using AgentGuard.Core.Storage;
 
 namespace AgentGuard.Cli;
@@ -33,6 +34,8 @@ public sealed class AdminCli
           agentguard export [--format ocsf|cef|json] [--from TIME] [--to TIME] [--agent ID] [--output FILE]
           agentguard verify [--offline] [--db PATH]
           agentguard version
+          agentguard cleanup-integrations [--profiles DIR;DIR] [--keep-hook]
+                            Restores MCP client configs and removes the Claude Code hook (run by the uninstaller)
 
         Connection options (management commands need the admin token, readable by Administrators only):
           --url URL         Service URL (default: AGENTGUARD_URL or the installed port on 127.0.0.1)
@@ -72,6 +75,7 @@ public sealed class AdminCli
                 ("export", _) => await ExportAsync(a, ct),
                 ("verify", _) => await VerifyAsync(a, ct),
                 ("version", _) => Version(),
+                ("cleanup-integrations", _) => await CleanupAsync(a),
                 ("help", _) or (null, _) => HelpText(),
                 _ => Usage($"Unknown command: {string.Join(' ', a.Positional)}"),
             };
@@ -278,6 +282,72 @@ public sealed class AdminCli
         return ExitCodes.IntegrityFailed;
     }
 
+    /// <summary>
+    /// Undoes what AgentGuard changed outside its own folders, so uninstalling never leaves an MCP client pointing at a
+    /// deleted proxy: proxied stdio servers are unwrapped, redirected HTTP servers get their original URL back, and the
+    /// machine-wide Claude Code hook is removed. Works with the service stopped; reads the database for HTTP upstreams.
+    /// </summary>
+    private async Task<int> CleanupAsync(Args a)
+    {
+        var restored = 0;
+        var failed = 0;
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Try(string what, Action act)
+        {
+            try { act(); restored++; }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)
+            {
+                failed++;
+                _err.WriteLine($"Could not restore {what}: {ex.Message}");
+            }
+        }
+
+        var db = Path.Combine(DataDir(a), "agentguard.db");
+        if (File.Exists(db))
+        {
+            using var store = new EventStore(db);
+            foreach (var s in store.ListMcpServers(includeMissing: true).Where(s => s.Proxied && File.Exists(s.ConfigPath)))
+            {
+                seen.Add(s.ConfigPath + "|" + string.Join('/', s.JsonPath));
+                if (s.Transport == "stdio") Try($"{s.Name} in {s.ConfigPath}", () => McpConfigRewriter.UnwrapStdio(s.ConfigPath, s.JsonPath));
+                else if (!string.IsNullOrEmpty(s.UpstreamUrl)) Try($"{s.Name} in {s.ConfigPath}", () => McpConfigRewriter.SetUrl(s.ConfigPath, s.JsonPath, s.UpstreamUrl!));
+            }
+            Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
+        }
+
+        // Anything still wrapped that the database does not know about (copied configs, a reset database).
+        var signatures = Path.Combine(AppContext.BaseDirectory, "defaults", "signatures", "agents.yaml");
+        if (File.Exists(signatures))
+        {
+            var clients = Core.Discovery.SignatureFile.Load(signatures).McpClients;
+            foreach (var s in Core.Discovery.McpConfigScanner.Scan(clients, Profiles(a)))
+            {
+                if (s.Transport != "stdio" || !s.Proxied || !seen.Add(s.ConfigPath + "|" + string.Join('/', s.JsonPath))) continue;
+                Try($"{s.Name} in {s.ConfigPath}", () => McpConfigRewriter.UnwrapStdio(s.ConfigPath, s.JsonPath));
+            }
+        }
+
+        if (!a.Has("keep-hook"))
+        {
+            var hook = ClaudeSettings.ManagedDropInPath();
+            if (ClaudeSettings.IsInstalled(hook)) Try("the Claude Code hook", () => ClaudeSettings.Uninstall(hook));
+        }
+
+        await _out.WriteLineAsync($"Restored {restored} integration{(restored == 1 ? "" : "s")}{(failed > 0 ? $", {failed} failed" : "")}.");
+        return failed > 0 ? ExitCodes.Failed : ExitCodes.Ok;
+    }
+
+    private static IEnumerable<string> Profiles(Args a)
+    {
+        if (a.Value("profiles") is { } list) return list.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var root = OperatingSystem.IsWindows()
+            ? Path.GetDirectoryName(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)) ?? @"C:\Users"
+            : "/home";
+        var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Public", "Default", "Default User", "All Users", "WDAGUtilityAccount" };
+        return Directory.Exists(root) ? Directory.GetDirectories(root).Where(d => !skip.Contains(Path.GetFileName(d))) : Array.Empty<string>();
+    }
+
     private sealed record IntegrityResultView(bool Ok, long Checked, long? FirstBadId);
 
     /// <summary>Verifies a private copy (database plus WAL) so evidence is never touched, even by SQLite housekeeping.</summary>
@@ -380,8 +450,8 @@ public sealed class CliException(string message, int exitCode) : Exception(messa
 /// <summary>Minimal argument parser: positionals, <c>--flag</c>, <c>--name value</c> and <c>--name=value</c>.</summary>
 public sealed class Args
 {
-    private static readonly HashSet<string> Flags = new() { "json", "server", "offline", "help" };
-    private static readonly HashSet<string> Valued = new() { "url", "token", "data-dir", "base-dir", "format", "from", "to", "agent", "output", "db", "version" };
+    private static readonly HashSet<string> Flags = new() { "json", "server", "offline", "help", "keep-hook" };
+    private static readonly HashSet<string> Valued = new() { "url", "token", "data-dir", "base-dir", "format", "from", "to", "agent", "output", "db", "version", "profiles" };
 
     public List<string> Positional { get; } = new();
     private readonly Dictionary<string, string?> _options = new();

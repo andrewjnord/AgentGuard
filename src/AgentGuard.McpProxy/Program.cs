@@ -65,7 +65,7 @@ public static class ProxyProgram
         await Task.WhenAny(relay, gracePeriod);
         if (!server.HasExited) TryKill(server);
         await server.WaitForExitAsync();
-        job?.Dispose();
+        if (OperatingSystem.IsWindows()) job?.Dispose();
         return server.ExitCode;
     }
 

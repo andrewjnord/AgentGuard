@@ -140,6 +140,36 @@ public class CliTests
     }
 
     [Fact]
+    public async Task CleanupRestoresProxiedMcpConfigs()
+    {
+        using var f = new ServiceFixture();
+        var dir = Path.Combine(f.ProfileDir, ".config", "Claude");
+        Directory.CreateDirectory(dir);
+        var config = Path.Combine(dir, "claude_desktop_config.json");
+        File.WriteAllText(config, JsonSerializer.Serialize(new
+        {
+            mcpServers = new Dictionary<string, object>
+            {
+                ["fs"] = new { command = "npx", args = new[] { "-y", "server-fs" } },
+                ["remote"] = new { type = "http", url = "https://mcp.example.com/mcp" },
+            },
+        }));
+        File.WriteAllText(Path.Combine(f.InstallDir, OperatingSystem.IsWindows() ? "agentguard-mcp-proxy.exe" : "agentguard-mcp-proxy"), "");
+        var c = f.Client();
+        foreach (var s in (await c.PostAsync("/api/v1/mcp/rescan", null).Ok()).EnumerateArray())
+            await c.Send(HttpMethod.Put, $"/api/v1/mcp/{s.GetProperty("id").GetString()}/proxy", new { enabled = true }).Ok();
+        Assert.Contains("agentguard-mcp-proxy", File.ReadAllText(config));
+        Assert.Contains("127.0.0.1:47823/mcp/", File.ReadAllText(config));
+
+        var r = await Run(f, "cleanup-integrations", "--profiles", f.ProfileDir, "--keep-hook");
+        Assert.Equal(0, r.Code);
+        Assert.Contains("Restored 2 integrations", r.Out);
+        var after = System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(config))!["mcpServers"]!;
+        Assert.Equal("npx", after["fs"]!["command"]!.GetValue<string>());
+        Assert.Equal("https://mcp.example.com/mcp", after["remote"]!["url"]!.GetValue<string>());
+    }
+
+    [Fact]
     public async Task ErrorsAndUsage()
     {
         using var f = new ServiceFixture();

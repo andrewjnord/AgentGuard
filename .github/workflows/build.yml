@@ -1,0 +1,129 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    env:
+      # Signing runs only when the certificate secrets exist (not on pull requests from forks).
+      SIGNING_CERT_PFX: ${{ secrets.SIGNING_CERT_PFX }}
+      SIGNING_CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/dashboard/package-lock.json
+
+      - name: Version
+        id: version
+        shell: pwsh
+        run: |
+          if ("${{ github.ref }}" -like "refs/tags/v*") { $v = "${{ github.ref_name }}".TrimStart("v") }
+          else { $v = "0.1.${{ github.run_number }}" }
+          "value=$v" >> $env:GITHUB_OUTPUT
+          Write-Host "Version $v"
+
+      - name: Dashboard type check
+        working-directory: src/dashboard
+        run: |
+          npm ci --no-audit --no-fund
+          npm run typecheck
+
+      - name: Build
+        run: dotnet build AgentGuard.sln -c Release -p:Version=${{ steps.version.outputs.value }}
+
+      - name: Test
+        run: >
+          dotnet test AgentGuard.sln -c Release --no-build
+          --logger "trx;LogFilePrefix=results" --results-directory TestResults
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+
+      - name: Publish app
+        shell: pwsh
+        run: ./build/publish.ps1 -Version ${{ steps.version.outputs.value }} -Output artifacts/app
+
+      - name: Sign binaries
+        if: env.SIGNING_CERT_PFX != ''
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem artifacts/app -File | Where-Object { $_.Name -match '^(AgentGuard|agentguard).*\.(exe|dll)$' } | ForEach-Object FullName
+          ./build/sign.ps1 -Files $files
+
+      - name: Build MSI
+        run: >
+          dotnet build installer/AgentGuard.Installer.wixproj -c Release
+          -p:ProductVersion=${{ steps.version.outputs.value }}
+          -p:AppDir=${{ github.workspace }}\artifacts\app\
+          -o artifacts/msi
+
+      - name: Sign MSI
+        if: env.SIGNING_CERT_PFX != ''
+        shell: pwsh
+        run: ./build/sign.ps1 -Files (Get-ChildItem artifacts/msi/*.msi | ForEach-Object FullName)
+
+      - name: Install, check and uninstall the MSI
+        shell: pwsh
+        run: ./build/smoke-test.ps1 -Msi (Get-ChildItem artifacts/msi/*.msi | Select-Object -First 1).FullName
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: AgentGuard-${{ steps.version.outputs.value }}
+          path: artifacts/msi/*.msi
+          if-no-files-found: error
+
+      - name: Upload smoke-test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: artifacts/logs
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: AgentGuard-*
+          path: dist
+          merge-multiple: true
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/*.msi --repo "${{ github.repository }}" --title "AgentGuard ${{ github.ref_name }}" --generate-notes

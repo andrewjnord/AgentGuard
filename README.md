@@ -15,11 +15,11 @@ The product spec lives in the shared AgentGuard spec doc. The local API contract
 | Windows service: host wiring, full local API (`docs/api.md`), SSE, background workers, demo mode | `src/AgentGuard.Service` | Done, 59 integration tests |
 | MCP stdio proxy (`agentguard-mcp-proxy`) | `src/AgentGuard.McpProxy` | Done |
 | Claude Code PreToolUse hook (`agentguard-hook`) | `src/AgentGuard.Hook` | Done |
-| Admin CLI (`agentguard`) | `src/AgentGuard.Cli` | Done |
+| Admin CLI (`agentguard`), including the uninstaller's `cleanup-integrations` | `src/AgentGuard.Cli` | Done |
 | Tray app (WPF + WebView2) | `src/AgentGuard.Tray` | Done (compiles; needs testing on Windows) |
-| Proxy, hook, CLI and tray tests | `tests/AgentGuard.Tools.Tests` | 44 tests |
+| Proxy, hook, CLI and tray tests | `tests/AgentGuard.Tools.Tests` | 45 tests |
 | Endpoint enforcement adapters (telemetry, process control, network blocking) | `src/AgentGuard.Service/Platform/Windows/WindowsEnforcement.cs` | Interfaces and safety guard done; Windows implementations still a placeholder |
-| Installer (WiX) and CI (GitHub Actions) | `installer/`, `.github/workflows/` | To do |
+| Installer (WiX v5 MSI), signing and CI (GitHub Actions, with install/uninstall smoke test) | `installer/`, `build/`, `.github/workflows/` | Done; first MSI build happens on the Windows runner. See [`docs/release.md`](docs/release.md) |
 
 ## Build
 
