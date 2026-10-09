@@ -85,7 +85,7 @@
       Start (or restart) the tray once an interactive install, upgrade or repair has finished. This runs in the UI
       sequence, which belongs to the signed-in user's own unelevated msiexec process, so the tray is not started
       elevated. Silent installs (/qn, used by fleet tools running as SYSTEM) have no UI sequence and skip it; the tray
-      then starts at the user's next sign-in from the Run key. "--background" makes a second copy exit quietly
+      then starts at the user's next sign-in from the Run key. The background switch makes a second copy exit quietly
       instead of opening the dashboard.
     -->
     <CustomAction Id="LaunchTray" Directory="INSTALLFOLDER" ExeCommand="&quot;[INSTALLFOLDER]AgentGuard.Tray.exe&quot; --background"
